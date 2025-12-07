@@ -49,17 +49,8 @@ public class PluginMode {
         
         // 启动日志监听
         logHandler = new LogHandler();
-        // 设置日志级别为ALL，确保捕获所有日志
-        logHandler.setLevel(java.util.logging.Level.ALL);
-        
         Logger rootLogger = Bukkit.getLogger().getParent();
         rootLogger.addHandler(logHandler);
-        rootLogger.setLevel(java.util.logging.Level.ALL);
-        
-        // 同时添加到Bukkit的Logger，确保捕获所有日志
-        Logger bukkitLogger = Bukkit.getLogger();
-        bukkitLogger.addHandler(logHandler);
-        bukkitLogger.setLevel(java.util.logging.Level.ALL);
         
         // 接受客户端连接
         executor.submit(this::acceptConnections);
@@ -124,13 +115,13 @@ public class PluginMode {
                         String response = rconClient.sendCommand(msg.content);
                         plugin.getLogger().info("执行命令: " + msg.content);
                         
-                        // 将RCON返回结果转发给远程控制端
+                        // 将RCON响应转发到远程控制端
                         if (response != null && !response.trim().isEmpty()) {
-                            sendLog("[RCON] " + response.trim());
+                            sendLog("[RCON Response] " + response);
                         }
                     } else {
                         plugin.getLogger().warning("RCON未连接，无法执行命令: " + msg.content);
-                        // 发送错误消息给控制端
+                        // 发送错误消息到控制端
                         sendLog("[ERROR] RCON未连接，无法执行命令: " + msg.content);
                     }
                 } else if (msg.type == NetworkProtocol.MSG_PING) {
@@ -223,24 +214,15 @@ public class PluginMode {
             if (running && record != null) {
                 // 构建完整的日志消息
                 StringBuilder sb = new StringBuilder();
-                
-                // 使用标准格式：[时间] [级别] [日志器] 消息
-                // 但为了兼容性，我们使用简化格式
                 sb.append("[").append(record.getLevel()).append("]");
                 
                 // 添加日志器名称（如果不是插件自己的日志）
                 String loggerName = record.getLoggerName();
-                if (loggerName != null && !loggerName.isEmpty() && !loggerName.contains("RCONPro")) {
-                    // 提取简短的日志器名称
-                    String shortName = loggerName;
-                    if (loggerName.contains(".")) {
-                        String[] parts = loggerName.split("\\.");
-                        if (parts.length > 0) {
-                            shortName = parts[parts.length - 1];
-                        }
+                if (loggerName != null && !loggerName.contains("RCONPro")) {
+                    String[] parts = loggerName.split("\\.");
+                    if (parts.length > 0) {
+                        sb.append(" [").append(parts[parts.length - 1]).append("]");
                     }
-                    // 添加日志器名称（包括Minecraft，因为玩家消息等可能通过Minecraft logger）
-                    sb.append(" [").append(shortName).append("]");
                 }
                 
                 // 添加消息内容
@@ -272,12 +254,6 @@ public class PluginMode {
                 
                 sendLog(sb.toString());
             }
-        }
-        
-        @Override
-        public boolean isLoggable(LogRecord record) {
-            // 记录所有级别的日志
-            return running && record != null;
         }
         
         @Override
