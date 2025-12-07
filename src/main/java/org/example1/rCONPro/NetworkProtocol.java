@@ -9,10 +9,11 @@ import java.nio.charset.StandardCharsets;
 public class NetworkProtocol {
     
     // 消息类型
-    public static final int MSG_LOG = 1;        // 日志消息
-    public static final int MSG_COMMAND = 2;    // 命令消息
-    public static final int MSG_PING = 3;       // 心跳
-    public static final int MSG_PONG = 4;       // 心跳响应
+    public static final int MSG_LOG = 1;           // 日志消息
+    public static final int MSG_COMMAND = 2;       // 命令消息
+    public static final int MSG_PING = 3;          // 心跳
+    public static final int MSG_PONG = 4;          // 心跳响应
+    public static final int MSG_RCON_CONFIG = 5;   // RCON配置（格式：host:port:password）
     
     /**
      * 发送消息
@@ -29,12 +30,19 @@ public class NetworkProtocol {
      * 接收消息
      */
     public static Message receiveMessage(DataInputStream in) throws IOException {
-        int type = in.readInt();
-        int length = in.readInt();
-        byte[] messageBytes = new byte[length];
-        in.readFully(messageBytes);
-        String message = new String(messageBytes, StandardCharsets.UTF_8);
-        return new Message(type, message);
+        try {
+            int type = in.readInt();
+            int length = in.readInt();
+            if (length < 0 || length > 1024 * 1024) { // 限制最大1MB
+                throw new IOException("消息长度异常: " + length);
+            }
+            byte[] messageBytes = new byte[length];
+            in.readFully(messageBytes);
+            String message = new String(messageBytes, StandardCharsets.UTF_8);
+            return new Message(type, message);
+        } catch (EOFException e) {
+            throw new IOException("连接已断开", e);
+        }
     }
     
     /**

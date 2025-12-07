@@ -30,11 +30,8 @@ public class ConfigManager {
         }
         
         PluginConfig config = new PluginConfig();
-        config.serverHost = props.getProperty("server.host", "localhost");
-        config.serverPort = Integer.parseInt(props.getProperty("server.port", "25575"));
-        config.serverPassword = props.getProperty("server.password", "changeme");
-        config.remoteHost = props.getProperty("remote.host", "localhost");
-        config.remotePort = Integer.parseInt(props.getProperty("remote.port", "25576"));
+        config.rconHost = props.getProperty("rcon.host", "localhost");
+        config.rconPort = Integer.parseInt(props.getProperty("rcon.port", "25575"));
         config.listenPort = Integer.parseInt(props.getProperty("listen.port", "25577"));
         
         return config;
@@ -45,11 +42,8 @@ public class ConfigManager {
      */
     public static void savePluginConfig(PluginConfig config) {
         Properties props = new Properties();
-        props.setProperty("server.host", config.serverHost);
-        props.setProperty("server.port", String.valueOf(config.serverPort));
-        props.setProperty("server.password", config.serverPassword);
-        props.setProperty("remote.host", config.remoteHost);
-        props.setProperty("remote.port", String.valueOf(config.remotePort));
+        props.setProperty("rcon.host", config.rconHost);
+        props.setProperty("rcon.port", String.valueOf(config.rconPort));
         props.setProperty("listen.port", String.valueOf(config.listenPort));
         
         saveProperties(PLUGIN_CONFIG_FILE, props);
@@ -70,6 +64,7 @@ public class ConfigManager {
         ClientConfig config = new ClientConfig();
         config.pluginHost = props.getProperty("plugin.host", "localhost");
         config.pluginPort = Integer.parseInt(props.getProperty("plugin.port", "25577"));
+        config.rconPassword = props.getProperty("rcon.password", "");
         
         return config;
     }
@@ -81,6 +76,7 @@ public class ConfigManager {
         Properties props = new Properties();
         props.setProperty("plugin.host", config.pluginHost);
         props.setProperty("plugin.port", String.valueOf(config.pluginPort));
+        props.setProperty("rcon.password", config.rconPassword);
         
         saveProperties(CLIENT_CONFIG_FILE, props);
     }
@@ -123,20 +119,18 @@ public class ConfigManager {
      * 插件配置类
      */
     public static class PluginConfig {
-        public String serverHost = "localhost";     // MC服务器RCON地址
-        public int serverPort = 25575;              // MC服务器RCON端口
-        public String serverPassword = "changeme";  // MC服务器RCON密码
-        public String remoteHost = "localhost";   // 远程控制端地址
-        public int remotePort = 25576;              // 远程控制端端口（用于主动连接）
-        public int listenPort = 25577;             // 插件监听端口（用于接收连接）
+        public String rconHost = "localhost";       // MC服务器RCON地址（等待控制端提供密码后连接）
+        public int rconPort = 25575;               // MC服务器RCON端口
+        public int listenPort = 25577;             // 插件监听端口（用于接收控制端连接）
     }
     
     /**
      * 远程控制端配置类
      */
     public static class ClientConfig {
-        public String pluginHost = "localhost";    // 插件地址
-        public int pluginPort = 25577;             // 插件端口
+        public String pluginHost = "localhost";    // 插件服务器地址
+        public int pluginPort = 25577;             // 插件监听端口
+        public String rconPassword = "";           // RCON密码（连接时发送给插件）
     }
 }
 
