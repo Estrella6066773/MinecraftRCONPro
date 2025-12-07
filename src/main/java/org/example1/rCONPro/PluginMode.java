@@ -1,6 +1,5 @@
 package org.example1.rCONPro;
 
-import org.bukkit.Bukkit;
 import org.bukkit.plugin.Plugin;
 
 import java.io.*;
@@ -8,8 +7,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.logging.LogRecord;
-import java.util.logging.Logger;
 
 /**
  * 插件模式 - 在MC服务器内运行
@@ -23,7 +20,7 @@ public class PluginMode {
     private DataInputStream clientInput;
     private DataOutputStream clientOutput;
     private ExecutorService executor;
-    private LogHandler logHandler;
+    private SystemOutCapture systemOutCapture;
     private boolean running = false;
     
     public PluginMode(Plugin plugin, ConfigManager.PluginConfig config) {
@@ -47,10 +44,9 @@ public class PluginMode {
             return;
         }
         
-        // 启动日志监听
-        logHandler = new LogHandler();
-        Logger rootLogger = Bukkit.getLogger().getParent();
-        rootLogger.addHandler(logHandler);
+        // 启动System.out捕获
+        systemOutCapture = new SystemOutCapture(this);
+        systemOutCapture.start();
         
         // 接受客户端连接
         executor.submit(this::acceptConnections);
@@ -193,7 +189,7 @@ public class PluginMode {
     /**
      * 发送日志到远程控制端
      */
-    private void sendLog(String logMessage) {
+    void sendLog(String logMessage) {
         synchronized (this) {
             if (clientOutput != null && clientSocket != null && !clientSocket.isClosed()) {
                 try {
@@ -206,74 +202,14 @@ public class PluginMode {
     }
     
     /**
-     * 日志处理器
-     */
-    private class LogHandler extends java.util.logging.Handler {
-        @Override
-        public void publish(LogRecord record) {
-            if (running && record != null) {
-                // 构建完整的日志消息
-                StringBuilder sb = new StringBuilder();
-                sb.append("[").append(record.getLevel()).append("]");
-                
-                // 添加日志器名称（如果不是插件自己的日志）
-                String loggerName = record.getLoggerName();
-                if (loggerName != null && !loggerName.contains("RCONPro")) {
-                    String[] parts = loggerName.split("\\.");
-                    if (parts.length > 0) {
-                        sb.append(" [").append(parts[parts.length - 1]).append("]");
-                    }
-                }
-                
-                // 添加消息内容
-                String message = record.getMessage();
-                if (message != null && !message.isEmpty()) {
-                    sb.append(" ").append(message);
-                } else if (message == null) {
-                    // 如果消息为null，尝试使用其他信息
-                    sb.append(" (无消息)");
-                }
-                
-                // 添加异常信息
-                Throwable thrown = record.getThrown();
-                if (thrown != null) {
-                    if (message == null || message.isEmpty()) {
-                        sb.append(" ").append(thrown.getClass().getSimpleName());
-                    } else {
-                        sb.append(": ").append(thrown.getClass().getSimpleName());
-                    }
-                    if (thrown.getMessage() != null) {
-                        sb.append(": ").append(thrown.getMessage());
-                    }
-                }
-                
-                // 如果所有内容都为空，至少输出日志级别
-                if (sb.length() <= record.getLevel().toString().length() + 2) {
-                    sb.append(" (空日志记录)");
-                }
-                
-                sendLog(sb.toString());
-            }
-        }
-        
-        @Override
-        public void flush() {
-        }
-        
-        @Override
-        public void close() throws SecurityException {
-        }
-    }
-    
-    /**
      * 停止插件模式
      */
     public void stop() {
         running = false;
         
-        if (logHandler != null) {
-            Logger rootLogger = Bukkit.getLogger().getParent();
-            rootLogger.removeHandler(logHandler);
+        // 停止System.out捕获并恢复
+        if (systemOutCapture != null) {
+            systemOutCapture.stop();
         }
         
         if (rconClient != null) {

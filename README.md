@@ -110,7 +110,7 @@ quit
 ## 系统要求
 
 - Java 21 或更高版本
-- Paper 1.21+ 服务器（插件模式）
+- Paper 1.21+ 服务器
 - 已启用 RCON 的 Minecraft 服务器
 
 ## 工作原理
