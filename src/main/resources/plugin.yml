@@ -1,0 +1,4 @@
+name: RCONPro
+version: '1.0-beta'
+main: org.example1.rCONPro.RCONPro
+api-version: '1.21'
