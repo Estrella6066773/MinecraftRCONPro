@@ -1,6 +1,6 @@
 # RCONPro
 
-一个功能强大的 Minecraft 服务器远程控制工具，支持作为 Paper 插件或独立应用运行。
+一个 Minecraft 服务器远程控制工具，支持作为 Paper 插件或独立应用运行。
 
 ## 功能特性
 
