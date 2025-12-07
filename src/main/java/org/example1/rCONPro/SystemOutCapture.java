@@ -51,6 +51,7 @@ public class SystemOutCapture {
     private class TeeOutputStream extends OutputStream {
         private final OutputStream original;
         private final StringBuilder buffer = new StringBuilder();
+        private final Object lock = new Object();
         
         public TeeOutputStream(OutputStream original) {
             this.original = original;
@@ -58,30 +59,39 @@ public class SystemOutCapture {
         
         @Override
         public void write(int b) throws IOException {
-            // 先写入原始流
-            original.write(b);
-            
-            // 避免循环输出
-            if (isForwarding.get()) {
-                return;
-            }
-            
-            // 收集到缓冲区
-            if (b == '\n') {
-                String line = buffer.toString();
-                buffer.setLength(0);
+            synchronized (lock) {
+                // 先写入原始流
+                original.write(b);
                 
-                if (!line.isEmpty() && !line.trim().isEmpty()) {
-                    // 转发到远程控制端
-                    isForwarding.set(true);
-                    try {
-                        pluginMode.sendLog(line);
-                    } finally {
-                        isForwarding.set(false);
-                    }
+                // 避免循环输出（如果正在转发，只写入原始流，不收集）
+                if (isForwarding.get()) {
+                    return;
                 }
-            } else if (b != '\r') {
-                buffer.append((char) b);
+                
+                // 收集到缓冲区
+                if (b == '\n') {
+                    String line = buffer.toString();
+                    buffer.setLength(0);
+                    
+                    // 移除末尾的空白字符，但保留原始内容
+                    String trimmedLine = line.trim();
+                    if (!trimmedLine.isEmpty()) {
+                        // 转发到远程控制端（转发原始行，包含所有内容）
+                        isForwarding.set(true);
+                        try {
+                            // 直接转发，不做任何过滤
+                            pluginMode.sendLog(trimmedLine);
+                        } catch (Exception e) {
+                            // 忽略转发错误，不影响原始输出
+                            // 注意：这里不能使用System.out/System.err，会导致循环
+                        } finally {
+                            isForwarding.set(false);
+                        }
+                    }
+                } else if (b != '\r') {
+                    // 收集所有非回车符的字符
+                    buffer.append((char) b);
+                }
             }
         }
         

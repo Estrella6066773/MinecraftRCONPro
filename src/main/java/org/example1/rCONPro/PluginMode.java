@@ -5,6 +5,8 @@ import org.bukkit.plugin.Plugin;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -20,7 +22,7 @@ public class PluginMode {
     private DataInputStream clientInput;
     private DataOutputStream clientOutput;
     private ExecutorService executor;
-    private SystemOutCapture systemOutCapture;
+    private LogFileMonitor logFileMonitor;
     private boolean running = false;
     
     public PluginMode(Plugin plugin, ConfigManager.PluginConfig config) {
@@ -44,9 +46,9 @@ public class PluginMode {
             return;
         }
         
-        // 启动System.out捕获
-        systemOutCapture = new SystemOutCapture(this);
-        systemOutCapture.start();
+        // 启动日志文件监控
+        logFileMonitor = new LogFileMonitor();
+        logFileMonitor.start();
         
         // 接受客户端连接
         executor.submit(this::acceptConnections);
@@ -78,6 +80,13 @@ public class PluginMode {
                     socket.setSoTimeout(0); // 无读取超时
                     clientInput = new DataInputStream(socket.getInputStream());
                     clientOutput = new DataOutputStream(socket.getOutputStream());
+                    
+                    // 发送连接成功测试消息（使用原始流，避免被SystemOutCapture捕获）
+                    try {
+                        NetworkProtocol.sendMessage(clientOutput, NetworkProtocol.MSG_LOG, "=== 远程控制端已连接，开始接收日志 ===");
+                    } catch (IOException e) {
+                        plugin.getLogger().warning("发送连接消息失败: " + e.getMessage());
+                    }
                 }
             } catch (IOException e) {
                 if (running) {
@@ -113,7 +122,27 @@ public class PluginMode {
                         
                         // 将RCON响应转发到远程控制端
                         if (response != null && !response.trim().isEmpty()) {
-                            sendLog("[RCON Response] " + response);
+                            // 直接发送，不使用sendLog（避免被SystemOutCapture捕获）
+                            synchronized (this) {
+                                if (clientOutput != null && clientSocket != null && !clientSocket.isClosed()) {
+                                    try {
+                                        NetworkProtocol.sendMessage(clientOutput, NetworkProtocol.MSG_LOG, response);
+                                    } catch (IOException e) {
+                                        plugin.getLogger().warning("发送RCON响应失败: " + e.getMessage());
+                                    }
+                                }
+                            }
+                        } else {
+                            // 即使响应为空，也发送一个空响应标记
+                            synchronized (this) {
+                                if (clientOutput != null && clientSocket != null && !clientSocket.isClosed()) {
+                                    try {
+                                        NetworkProtocol.sendMessage(clientOutput, NetworkProtocol.MSG_LOG, "[RCON Response] (empty)");
+                                    } catch (IOException e) {
+                                        // 忽略
+                                    }
+                                }
+                            }
                         }
                     } else {
                         plugin.getLogger().warning("RCON未连接，无法执行命令: " + msg.content);
@@ -190,12 +219,145 @@ public class PluginMode {
      * 发送日志到远程控制端
      */
     void sendLog(String logMessage) {
+        if (logMessage == null || logMessage.trim().isEmpty()) {
+            return;
+        }
+        
         synchronized (this) {
-            if (clientOutput != null && clientSocket != null && !clientSocket.isClosed()) {
+            // 检查客户端是否已连接
+            if (clientOutput == null || clientSocket == null || clientSocket.isClosed()) {
+                // 客户端未连接，不发送（这是正常的，因为SystemOutCapture在客户端连接前就启动了）
+                return;
+            }
+            
+            try {
+                NetworkProtocol.sendMessage(clientOutput, NetworkProtocol.MSG_LOG, logMessage);
+            } catch (IOException e) {
+                // 连接可能已断开，清理连接状态
+                plugin.getLogger().warning("发送日志失败: " + e.getMessage());
                 try {
-                    NetworkProtocol.sendMessage(clientOutput, NetworkProtocol.MSG_LOG, logMessage);
+                    if (clientSocket != null && !clientSocket.isClosed()) {
+                        clientSocket.close();
+                    }
+                } catch (IOException ex) {
+                    // 忽略
+                }
+                clientSocket = null;
+                clientInput = null;
+                clientOutput = null;
+            }
+        }
+    }
+    
+    /**
+     * 日志文件监控器 - 监控logs/latest.log文件
+     */
+    private class LogFileMonitor {
+        private Path logFile;
+        private long lastPosition = 0;
+        private WatchService watchService;
+        private boolean monitoring = false;
+        
+        public LogFileMonitor() {
+            // 获取服务器根目录下的logs/latest.log
+            File serverDir = new File(".").getAbsoluteFile();
+            logFile = Paths.get(serverDir.getParent(), "logs", "latest.log");
+            
+            // 如果找不到，尝试当前目录
+            if (!Files.exists(logFile)) {
+                logFile = Paths.get("logs", "latest.log");
+            }
+        }
+        
+        public void start() {
+            if (!Files.exists(logFile)) {
+                plugin.getLogger().warning("日志文件不存在: " + logFile + "，等待文件创建...");
+            } else {
+                plugin.getLogger().info("开始监控日志文件: " + logFile);
+                // 初始化位置到文件末尾
+                try {
+                    lastPosition = Files.size(logFile);
                 } catch (IOException e) {
-                    // 连接可能已断开
+                    plugin.getLogger().warning("无法获取日志文件大小: " + e.getMessage());
+                }
+            }
+            
+            monitoring = true;
+            executor.submit(this::monitorLoop);
+        }
+        
+        private void monitorLoop() {
+            while (running && monitoring) {
+                try {
+                    if (Files.exists(logFile)) {
+                        // 读取新增内容
+                        readNewLines();
+                    }
+                    // 每100ms检查一次
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    break;
+                } catch (Exception e) {
+                    plugin.getLogger().warning("监控日志文件时出错: " + e.getMessage());
+                    try {
+                        Thread.sleep(1000); // 出错后等待1秒再重试
+                    } catch (InterruptedException ie) {
+                        break;
+                    }
+                }
+            }
+        }
+        
+        private void readNewLines() {
+            try {
+                long currentSize = Files.size(logFile);
+                
+                if (currentSize < lastPosition) {
+                    // 文件被截断（可能是日志轮转），从头开始
+                    lastPosition = 0;
+                }
+                
+                if (currentSize > lastPosition) {
+                    // 有新内容，读取并转发
+                    try (RandomAccessFile raf = new RandomAccessFile(logFile.toFile(), "r")) {
+                        raf.seek(lastPosition);
+                        
+                        // 读取新增的字节
+                        byte[] buffer = new byte[(int)(currentSize - lastPosition)];
+                        int bytesRead = raf.read(buffer);
+                        
+                        if (bytesRead > 0) {
+                            // 转换为UTF-8字符串
+                            String newContent = new String(buffer, 0, bytesRead, StandardCharsets.UTF_8);
+                            
+                            // 按行分割并转发
+                            String[] lines = newContent.split("\n", -1);
+                            for (int i = 0; i < lines.length; i++) {
+                                String line = lines[i];
+                                // 如果不是最后一行，或者最后一行不为空，则转发
+                                if (i < lines.length - 1 || !line.isEmpty()) {
+                                    if (!line.trim().isEmpty()) {
+                                        sendLog(line);
+                                    }
+                                }
+                            }
+                            
+                            lastPosition = raf.getFilePointer();
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                // 文件可能正在被写入，忽略错误
+            }
+        }
+        
+        public void stop() {
+            monitoring = false;
+            if (watchService != null) {
+                try {
+                    watchService.close();
+                } catch (IOException e) {
+                    // 忽略
                 }
             }
         }
@@ -207,9 +369,9 @@ public class PluginMode {
     public void stop() {
         running = false;
         
-        // 停止System.out捕获并恢复
-        if (systemOutCapture != null) {
-            systemOutCapture.stop();
+        // 停止日志文件监控
+        if (logFileMonitor != null) {
+            logFileMonitor.stop();
         }
         
         if (rconClient != null) {
