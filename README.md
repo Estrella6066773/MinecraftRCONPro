@@ -13,7 +13,7 @@ Minecraft 服务器远程控制工具，支持作为 Paper 插件或独立应用
 
 ### 插件端（服务器）
 
-1. 将 `rconpro-1.0-beta.jar` 放入 `plugins` 目录
+1. 将 `rconpro.jar` 放入 `plugins` 目录
 2. 启动服务器，编辑 `plugins/RCONPro/config.properties`：
    ```properties
    rcon.host=localhost      # MC服务器RCON地址
@@ -24,7 +24,7 @@ Minecraft 服务器远程控制工具，支持作为 Paper 插件或独立应用
 
 ### 控制端（远程）
 
-1. 运行 `java -jar rconpro-1.0-beta.jar`
+1. 运行 `java -jar rconpro.jar` (注意正确填写版本号)
 2. 编辑生成的 `rconpro-client.properties`：
    ```properties
    plugin.host=localhost       # 插件服务器地址
@@ -36,12 +36,11 @@ Minecraft 服务器远程控制工具，支持作为 Paper 插件或独立应用
 ## 系统要求
 
 - Java 21+
-- Paper 1.21+
+- Paper 1.21+ (于1.21.10测试)
 - 已启用 RCON 的 Minecraft 服务器
 
 ## 注意事项
 
 - 确保服务器已启用 RCON（在 `server.properties` 中配置）
-- 防火墙需要开放插件监听端口（默认 25577）
 - RCON密码存储在控制端配置文件中，请妥善保管
 

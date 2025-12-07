@@ -41,12 +41,11 @@ public class ConfigManager {
      * 保存插件配置
      */
     public static void savePluginConfig(PluginConfig config) {
-        Properties props = new Properties();
-        props.setProperty("rcon.host", config.rconHost);
-        props.setProperty("rcon.port", String.valueOf(config.rconPort));
-        props.setProperty("listen.port", String.valueOf(config.listenPort));
-        
-        saveProperties(PLUGIN_CONFIG_FILE, props);
+        savePropertiesWithComments(PLUGIN_CONFIG_FILE, new String[][] {
+            {"rcon.host", config.rconHost, "MC服务器RCON地址"},
+            {"rcon.port", String.valueOf(config.rconPort), "MC服务器RCON端口"},
+            {"listen.port", String.valueOf(config.listenPort), "插件监听端口（用于接收远程控制端连接）"}
+        });
     }
     
     /**
@@ -73,12 +72,11 @@ public class ConfigManager {
      * 保存远程控制端配置
      */
     public static void saveClientConfig(ClientConfig config) {
-        Properties props = new Properties();
-        props.setProperty("plugin.host", config.pluginHost);
-        props.setProperty("plugin.port", String.valueOf(config.pluginPort));
-        props.setProperty("rcon.password", config.rconPassword);
-        
-        saveProperties(CLIENT_CONFIG_FILE, props);
+        savePropertiesWithComments(CLIENT_CONFIG_FILE, new String[][] {
+            {"plugin.host", config.pluginHost, "插件服务器地址"},
+            {"plugin.port", String.valueOf(config.pluginPort), "插件监听端口（必须与插件配置中的listen.port一致）"},
+            {"rcon.password", config.rconPassword, "RCON密码（连接时发送给插件）"}
+        });
     }
     
     private static Properties loadProperties(String filePath) {
@@ -98,15 +96,29 @@ public class ConfigManager {
         }
     }
     
-    private static void saveProperties(String filePath, Properties props) {
+    /**
+     * 保存带注释的配置文件
+     * @param filePath 文件路径
+     * @param entries 配置项数组，每个元素为 [key, value, comment]
+     */
+    private static void savePropertiesWithComments(String filePath, String[][] entries) {
         Path path = Paths.get(filePath);
         try {
             Path parent = path.getParent();
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-            try (OutputStream os = Files.newOutputStream(path)) {
-                props.store(os, "RCONPro Configuration");
+            try (PrintWriter writer = new PrintWriter(
+                    new OutputStreamWriter(Files.newOutputStream(path), "UTF-8"))) {
+                writer.println("# RCONPro Configuration");
+                writer.println("# Generated automatically");
+                writer.println();
+                for (String[] entry : entries) {
+                    String key = entry[0];
+                    String value = entry[1];
+                    String comment = entry.length > 2 ? entry[2] : "";
+                    writer.println(key + "=" + value + (comment.isEmpty() ? "" : " # " + comment));
+                }
                 System.out.println("配置文件已生成: " + path.toAbsolutePath());
             }
         } catch (IOException e) {
