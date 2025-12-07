@@ -6,7 +6,7 @@
 
     <groupId>org.example1</groupId>
     <artifactId>rconpro</artifactId>
-    <version>1.0-beta</version>
+    <version>1.0</version>
     <packaging>jar</packaging>
 
     <name>rconpro</name>

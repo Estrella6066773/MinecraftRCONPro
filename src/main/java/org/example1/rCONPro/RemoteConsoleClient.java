@@ -21,6 +21,9 @@ public class RemoteConsoleClient {
      * 启动远程控制端
      */
     public void start() {
+        // 启用ANSI颜色支持
+        ColorOutput.enableAnsi();
+        
         System.out.println("=== RCONPro 远程控制端 ===");
         
         // 加载配置
@@ -166,8 +169,9 @@ public class RemoteConsoleClient {
                 NetworkProtocol.Message msg = NetworkProtocol.receiveMessage(currentInput);
                 
                 if (msg.type == NetworkProtocol.MSG_LOG) {
-                    // 打印日志
-                    System.out.println(msg.content);
+                    // 打印日志（带颜色）
+                    String coloredLine = ColorOutput.formatLogLine(msg.content);
+                    System.out.println(coloredLine);
                 } else if (msg.type == NetworkProtocol.MSG_PONG) {
                     // 心跳响应，不打印
                 }
